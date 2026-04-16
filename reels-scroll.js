@@ -78,6 +78,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // 2. Master function to setup a video (HLS + Observer + Clicks)
     function setupVideo(video) {
+        
+        // Inside your setupVideo function
+        const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
+        console.log("Found icon for this video?", icon); // <--- Add this
         const src = video.getAttribute('data-src');
         const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
 
@@ -144,6 +148,3 @@ document.addEventListener("DOMContentLoaded", function() {
 
 });
 
-// Inside your setupVideo function
-const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
-console.log("Found icon for this video?", icon); // <--- Add this
