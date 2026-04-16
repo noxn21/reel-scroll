@@ -1,6 +1,3 @@
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-
-<script>
 document.addEventListener("DOMContentLoaded", function() {
     const track = document.querySelector('.reels-track');
     if (!track) return;
@@ -146,4 +143,3 @@ document.addEventListener("DOMContentLoaded", function() {
     appendObserver.observe(tripwire);
 
 });
-</script>
