@@ -2,16 +2,14 @@ document.addEventListener("DOMContentLoaded", function() {
     const track = document.querySelector('.reels-track');
     if (!track) return;
 
-    // 1. Save the original items as our "Blueprint"
     const originalItems = Array.from(track.querySelectorAll('.reel-item'));
 
-    // --- NEW: DRAG TO SCROLL LOGIC ---
+    // --- DRAG TO SCROLL ---
     let isDown = false;
     let startY;
     let scrollTop;
-    let isDragging = false; // Prevents accidental pauses when dragging
+    let isDragging = false;
 
-    // Give visual feedback that it's draggable
     track.style.cursor = 'grab';
 
     track.addEventListener('mousedown', (e) => {
@@ -20,109 +18,86 @@ document.addEventListener("DOMContentLoaded", function() {
         track.style.cursor = 'grabbing';
         startY = e.pageY - track.offsetTop;
         scrollTop = track.scrollTop;
-        
-        // Temporarily turn off snap so the drag feels 1:1 and smooth
         track.style.scrollSnapType = 'none'; 
     });
 
     track.addEventListener('mouseleave', () => {
         isDown = false;
-        track.style.cursor = 'grab';
-        track.style.scrollSnapType = 'y mandatory'; // Turn snap back on
+        track.style.scrollSnapType = 'y mandatory';
     });
 
     track.addEventListener('mouseup', () => {
         isDown = false;
         track.style.cursor = 'grab';
-        track.style.scrollSnapType = 'y mandatory'; // Turn snap back on
-        
-        // Reset dragging flag after a tiny delay so the click event has time to check it
-        setTimeout(() => { isDragging = false; }, 50);
+        track.style.scrollSnapType = 'y mandatory';
+        // Delay resetting isDragging so the click handler can see it
+        setTimeout(() => { isDragging = false; }, 100);
     });
 
     track.addEventListener('mousemove', (e) => {
         if (!isDown) return;
-        e.preventDefault();
-        
         const y = e.pageY - track.offsetTop;
-        const walk = (y - startY) * 1.5; // Multiply by 1.5 for slightly faster scrolling
-        
-        // If we move more than 5 pixels, count it as a drag, not a click
-        if (Math.abs(walk) > 5) {
+        const walk = (y - startY) * 1.5;
+        if (Math.abs(walk) > 10) { // Increased threshold to 10px
             isDragging = true;
         }
-        
         track.scrollTop = scrollTop - walk;
     });
-    // ----------------------------------
 
-
-    // --- OBSERVER: Play/Pause & Reset Logic ---
+    // --- OBSERVER ---
     const playObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             const video = entry.target;
-            const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
+            const item = video.closest('.reel-item');
+            const icon = item ? item.querySelector('.reel-pause-icon') : null;
 
             if (entry.isIntersecting) {
                 video.currentTime = 0;
-                video.play().catch(e => console.log("Autoplay prevented by browser."));
-                if(icon) icon.style.display = 'none'; // Ensure icon is hidden when playing
+                video.play().catch(e => {});
+                if (icon) icon.style.display = 'none'; // Hide icon on auto-play
             } else {
                 video.pause();
-                if(icon) icon.style.display = 'none'; // Keep hidden when off-screen
+                if (icon) icon.style.display = 'none'; // Hide icon when scrolled away
             }
         });
-    }, {
-        threshold: 0.6
-    });
+    }, { threshold: 0.6 });
 
-    // 2. Master function to setup a video (HLS + Observer + Clicks)
+    // --- SETUP FUNCTION ---
     function setupVideo(video) {
-        
-        // Inside your setupVideo function
-        const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
-        console.log("Found icon for this video?", icon); // <--- Add this
+        const item = video.closest('.reel-item');
+        const icon = item ? item.querySelector('.reel-pause-icon') : null;
         const src = video.getAttribute('data-src');
-        const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
 
-        // Setup the HLS stream
         if (Hls.isSupported()) {
-            const hls = new Hls({
-                startLevel: -1,
-                capLevelToPlayerSize: true
-            });
+            const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: true });
             hls.loadSource(src);
             hls.attachMedia(video);
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = src;
         }
 
-        // Tell the observer to watch this video
         playObserver.observe(video);
 
-        // Add the play/pause on click (with Drag Protection)
-        video.addEventListener('click', (e) => {
-            // If the user was dragging, ignore this click
-            if (isDragging) {
-                e.preventDefault();
-                return; 
-            }
+        // CLICK LOGIC
+        video.addEventListener('click', () => {
+            console.log("Video clicked! isDragging is:", isDragging);
+            
+            if (isDragging) return; // Don't toggle if we were just scrolling
 
             if (video.paused) {
                 video.play();
                 if (icon) icon.style.display = 'none';
             } else {
                 video.pause();
-                if (icon) icon.style.display = 'flex'; // Use 'flex' or 'block' depending on how you styled it in Webflow
+                if (icon) icon.style.display = 'flex';
             }
         });
     }
 
-    // 3. Setup the initial videos that are already on the page
-    const initialVideos = track.querySelectorAll('.hls-reel-video');
-    initialVideos.forEach(setupVideo);
+    // INITIAL SETUP
+    track.querySelectorAll('.hls-reel-video').forEach(setupVideo);
 
-    // --- THE CONVEYOR BELT (Infinite Load) ---
+    // CONVEYOR BELT
     const tripwire = document.createElement('div');
     tripwire.style.height = "1px";
     tripwire.style.width = "100%";
@@ -134,17 +109,11 @@ document.addEventListener("DOMContentLoaded", function() {
             originalItems.forEach(item => {
                 const clone = item.cloneNode(true);
                 track.insertBefore(clone, tripwire);
-
                 const newVideo = clone.querySelector('.hls-reel-video');
                 setupVideo(newVideo);
             });
         }
-    }, {
-        root: track,
-        rootMargin: "0px 0px 800px 0px"
-    });
+    }, { root: track, rootMargin: "0px 0px 800px 0px" });
 
     appendObserver.observe(tripwire);
-
 });
-
