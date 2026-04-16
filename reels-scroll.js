@@ -143,3 +143,7 @@ document.addEventListener("DOMContentLoaded", function() {
     appendObserver.observe(tripwire);
 
 });
+
+// Inside your setupVideo function
+const icon = video.closest('.reel-item').querySelector('.reel-pause-icon');
+console.log("Found icon for this video?", icon); // <--- Add this
