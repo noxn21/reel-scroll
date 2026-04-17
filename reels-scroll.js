@@ -1,8 +1,9 @@
-document.addEventListener("DOMContentLoaded", function() {
-    const track = document.querySelector('.reels-track');
+document.addEventListener("DOMContentLoaded", function () {
+    const track = document.querySelector(".reels-track");
     if (!track) return;
 
-    const originalItems = Array.from(track.querySelectorAll('.reel-item'));
+    const originalItems = Array.from(track.querySelectorAll(".reel-item"));
+    if (!originalItems.length) return;
 
     // --- DRAG TO SCROLL ---
     let isDown = false;
@@ -10,110 +11,158 @@ document.addEventListener("DOMContentLoaded", function() {
     let scrollTop;
     let isDragging = false;
 
-    track.style.cursor = 'grab';
+    track.style.cursor = "grab";
 
-    track.addEventListener('mousedown', (e) => {
+    track.addEventListener("mousedown", (e) => {
         isDown = true;
         isDragging = false;
-        track.style.cursor = 'grabbing';
+        track.style.cursor = "grabbing";
         startY = e.pageY - track.offsetTop;
         scrollTop = track.scrollTop;
-        track.style.scrollSnapType = 'none'; 
+        track.style.scrollSnapType = "none";
     });
 
-    track.addEventListener('mouseleave', () => {
+    track.addEventListener("mouseleave", () => {
         isDown = false;
-        track.style.scrollSnapType = 'y mandatory';
+        track.style.cursor = "grab";
+        track.style.scrollSnapType = "y mandatory";
     });
 
-    track.addEventListener('mouseup', () => {
+    track.addEventListener("mouseup", () => {
         isDown = false;
-        track.style.cursor = 'grab';
-        track.style.scrollSnapType = 'y mandatory';
-        // Delay resetting isDragging so the click handler can see it
-        setTimeout(() => { isDragging = false; }, 100);
+        track.style.cursor = "grab";
+        track.style.scrollSnapType = "y mandatory";
+
+        // Delay resetting isDragging so the click handler can still detect it
+        setTimeout(() => {
+            isDragging = false;
+        }, 100);
     });
 
-    track.addEventListener('mousemove', (e) => {
+    track.addEventListener("mousemove", (e) => {
         if (!isDown) return;
+
         const y = e.pageY - track.offsetTop;
         const walk = (y - startY) * 1.5;
-        if (Math.abs(walk) > 10) { // Increased threshold to 10px
+
+        if (Math.abs(walk) > 10) {
             isDragging = true;
         }
+
         track.scrollTop = scrollTop - walk;
     });
 
     // --- OBSERVER ---
     const playObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
+        entries.forEach((entry) => {
             const video = entry.target;
-            const item = video.closest('.reel-item');
-            const icon = item ? item.querySelector('.reel-pause-icon') : null;
+            const item = video.closest(".reel-item");
+            const icon = item ? item.querySelector(".reel-pause-icon") : null;
 
             if (entry.isIntersecting) {
                 video.currentTime = 0;
-                video.play().catch(e => {});
-                if (icon) icon.style.display = 'none'; // Hide icon on auto-play
+                video.play().catch(() => {});
+                if (icon) icon.style.display = "none";
             } else {
                 video.pause();
-                if (icon) icon.style.display = 'none'; // Hide icon when scrolled away
+                if (icon) icon.style.display = "none";
             }
         });
     }, { threshold: 0.6 });
 
-    // --- SETUP FUNCTION ---
-    function setupVideo(video) {
-        const item = video.closest('.reel-item');
-        const icon = item ? item.querySelector('.reel-pause-icon') : null;
-        const src = video.getAttribute('data-src');
+    // --- VIDEO SETUP ---
+    function setupVideo(video, observe = true) {
+        const item = video.closest(".reel-item");
+        const icon = item ? item.querySelector(".reel-pause-icon") : null;
+        const src = video.getAttribute("data-src");
+
+        if (!src) return;
 
         if (Hls.isSupported()) {
-            const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: true });
+            const hls = new Hls({
+                startLevel: -1,
+                capLevelToPlayerSize: true
+            });
             hls.loadSource(src);
             hls.attachMedia(video);
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
             video.src = src;
         }
 
-        playObserver.observe(video);
+        if (observe) {
+            playObserver.observe(video);
+        }
 
-        // CLICK LOGIC
-        video.addEventListener('click', () => {
-            console.log("Video clicked! isDragging is:", isDragging);
-            
-            if (isDragging) return; // Don't toggle if we were just scrolling
+        video.addEventListener("click", () => {
+            if (isDragging) return;
 
             if (video.paused) {
-                video.play();
-                if (icon) icon.style.display = 'none';
+                video.play().catch(() => {});
+                if (icon) icon.style.display = "none";
             } else {
                 video.pause();
-                if (icon) icon.style.display = 'flex';
+                if (icon) icon.style.display = "flex";
             }
         });
     }
 
-    // INITIAL SETUP
-    track.querySelectorAll('.hls-reel-video').forEach(setupVideo);
+    // --- STABLE INFINITE LOOP SETUP ---
+    const originalHTML = originalItems.map(item => item.outerHTML).join("");
 
-    // CONVEYOR BELT
-    const tripwire = document.createElement('div');
-    tripwire.style.height = "1px";
-    tripwire.style.width = "100%";
-    tripwire.style.flexShrink = "0";
-    track.appendChild(tripwire);
+    // Build a fixed loop: [clone][original][clone]
+    track.innerHTML = originalHTML + originalHTML + originalHTML;
 
-    const appendObserver = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-            originalItems.forEach(item => {
-                const clone = item.cloneNode(true);
-                track.insertBefore(clone, tripwire);
-                const newVideo = clone.querySelector('.hls-reel-video');
-                setupVideo(newVideo);
+    const allItems = Array.from(track.querySelectorAll(".reel-item"));
+    const setSize = originalItems.length;
+
+    // Set up videos once on the rebuilt DOM
+    track.querySelectorAll(".hls-reel-video").forEach((video) => {
+        setupVideo(video, true);
+    });
+
+    function getItemHeight() {
+        const referenceItem = allItems[setSize];
+        return referenceItem ? referenceItem.offsetHeight : 0;
+    }
+
+    function getSetHeight() {
+        const itemHeight = getItemHeight();
+        return itemHeight * setSize;
+    }
+
+    // Start in the middle block
+    requestAnimationFrame(() => {
+        const setHeight = getSetHeight();
+        if (setHeight > 0) {
+            track.scrollTop = setHeight;
+        }
+    });
+
+    // --- SEAMLESS REPOSITIONING ---
+    let isLoopAdjusting = false;
+
+    track.addEventListener("scroll", () => {
+        if (isLoopAdjusting) return;
+
+        const itemHeight = getItemHeight();
+        const setHeight = getSetHeight();
+
+        if (!itemHeight || !setHeight) return;
+
+        // Move back into the middle block when getting too close
+        // to either edge, so the loop feels continuous
+        if (track.scrollTop <= itemHeight * 0.5) {
+            isLoopAdjusting = true;
+            track.scrollTop += setHeight;
+            requestAnimationFrame(() => {
+                isLoopAdjusting = false;
+            });
+        } else if (track.scrollTop >= (setHeight * 2) - (itemHeight * 0.5)) {
+            isLoopAdjusting = true;
+            track.scrollTop -= setHeight;
+            requestAnimationFrame(() => {
+                isLoopAdjusting = false;
             });
         }
-    }, { root: track, rootMargin: "0px 0px 800px 0px" });
-
-    appendObserver.observe(tripwire);
+    });
 });
